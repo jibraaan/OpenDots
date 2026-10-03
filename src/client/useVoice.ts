@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, authHeaders } from './api';
+import { createRecoveryWindow } from './voice-recovery';
+const RECOVERY_GRACE_MS = 5000;
 export function useVoice(
   threadId: string,
   onSaved: () => void,
@@ -29,6 +31,7 @@ export function useVoice(
         channel: RTCDataChannel;
         transcript: string[];
         timer?: ReturnType<typeof setTimeout>;
+        recovery: ReturnType<typeof createRecoveryWindow>;
         cancelled: boolean;
       }
     | undefined
@@ -45,6 +48,7 @@ export function useVoice(
     current.audio.pause();
     current.audio.srcObject = null;
     clearTimeout(current.timer);
+    current.recovery.dispose();
   }, []);
   const end = useCallback(async () => {
     if (ending.current) return;
@@ -63,6 +67,7 @@ export function useVoice(
     });
     current.audio.pause();
     clearTimeout(current.timer);
+    current.recovery.dispose();
     ending.current = true;
     setStatus('ending');
     try {
@@ -111,12 +116,16 @@ export function useVoice(
       if (id)
         void api<{ endedAt: number | null }>(`/voice/calls/${id}`)
           .then((call) => {
-            if (session.current === current && call.endedAt) void end();
+            if (session.current !== current) return;
+            current?.recovery.recover('control');
+            if (call.endedAt) void end();
           })
           .catch(() => {
             if (session.current !== current) return;
-            setError('Call control connection was lost.');
-            void end();
+            current?.recovery.fault(
+              'control',
+              'Call control connection was lost.',
+            );
           });
     }, 2000);
     return () => clearInterval(timer);
@@ -153,6 +162,11 @@ export function useVoice(
         cancelled: false,
         id: undefined as string | undefined,
         timer: undefined as ReturnType<typeof setTimeout> | undefined,
+        recovery: createRecoveryWindow(RECOVERY_GRACE_MS, (message) => {
+          if (current.cancelled) return;
+          setError(message);
+          void end();
+        }),
       };
       session.current = current;
       stream.getTracks().forEach((track) => pc.addTrack(track, stream!));
@@ -169,6 +183,7 @@ export function useVoice(
       pc.onconnectionstatechange = () => {
         if (current.cancelled) return;
         if (pc.connectionState === 'connected') {
+          current.recovery.recover('peer');
           setStatus('active');
           setStartedAt((value) => value ?? Date.now());
           if (current.id)
@@ -178,7 +193,10 @@ export function useVoice(
               },
             );
         }
-        if (['failed', 'disconnected'].includes(pc.connectionState)) {
+        // A disconnected peer often reconnects on its own; failed is final.
+        if (pc.connectionState === 'disconnected')
+          current.recovery.fault('peer', 'The voice connection dropped.');
+        if (pc.connectionState === 'failed') {
           setError('The voice connection dropped.');
           void end();
         }

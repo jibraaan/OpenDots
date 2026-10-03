@@ -1,0 +1,10 @@
+# Check out text with LF on every platform so Prettier's endOfLine: "lf"
+# passes on a fresh Windows clone.
+* text=auto eol=lf
+*.gif binary
+*.ico binary
+*.jpg binary
+*.mp4 binary
+*.png binary
+*.webp binary
+*.zip binary
