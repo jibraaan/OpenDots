@@ -5,6 +5,11 @@ import {
   connectionActionTool,
 } from '../shared/connection-types';
 import { ConnectionActionCard } from './ConnectionActionCard';
+import { ContactRequestCard } from './ContactRequestCard';
+import {
+  contactRequestSchema,
+  contactRequestTool,
+} from '../shared/contact-types';
 import { contextualMessage, type PageContext } from './page-context';
 import { api } from './api';
 import type { Page } from '../server/pages';
@@ -160,6 +165,8 @@ export function Chat({
       setRunning(false);
     }
   };
+  const sendRef = useRef(send);
+  sendRef.current = send;
   useEffect(() => {
     if (loaded && contextReady && !paused && initialPrompt && !sent.current) {
       sent.current = true;
@@ -191,6 +198,21 @@ export function Chat({
       parameters: connectionActionSchema,
       render: (props) => (
         <ConnectionActionCard {...props} threadId={thread.id} />
+      ),
+    },
+    [thread.id],
+  );
+  useHumanInTheLoop(
+    {
+      name: contactRequestTool.name,
+      description: contactRequestTool.description,
+      parameters: contactRequestSchema,
+      render: (props) => (
+        <ContactRequestCard
+          {...props}
+          threadId={thread.id}
+          onContinue={(text) => void sendRef.current(text)}
+        />
       ),
     },
     [thread.id],
@@ -237,7 +259,8 @@ export function Chat({
             (call) =>
               call.function.name.startsWith('computer_') ||
               call.function.name === pageReviewTool.name ||
-              call.function.name === connectionActionTool.name,
+              call.function.name === connectionActionTool.name ||
+              call.function.name === contactRequestTool.name,
           ))),
   );
   return (

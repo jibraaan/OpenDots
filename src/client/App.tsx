@@ -7,6 +7,7 @@ import {
   ArrowUp,
   ArrowUpRight,
   BookOpen,
+  Users,
   Clock3,
   Code2,
   Folder,
@@ -39,15 +40,16 @@ import { ResultPane } from './ResultPane';
 import { TaskRow } from './TaskPresentation';
 import { TaskActions } from './TaskActions';
 import { WorkspaceDialog, type Dialog } from './WorkspaceDialog';
+import { ContactsView } from './ContactsView';
 
 export function App() {
   const [state, setState] = useState<State>();
   const [workspace, setWorkspace] = useState<WorkspaceState>();
   const [selectedDot, setSelectedDot] = useState('');
   const [selectedThread, setSelectedThread] = useState<string>();
-  const [view, rawSetView] = useState<'chat' | 'tasks' | 'memories' | 'space'>(
-    'chat',
-  );
+  const [view, rawSetView] = useState<
+    'chat' | 'tasks' | 'memories' | 'space' | 'contacts'
+  >('chat');
   const dirtyPage = useRef(false);
   const [spaceId, setSpaceId] = useState('');
   const [pageId, setPageId] = useState<string>();
@@ -447,6 +449,24 @@ export function App() {
             <small>{state.memories.length}</small>
           </button>
           <button
+            className={`nav-item ${view === 'contacts' ? 'active' : ''}`}
+            onClick={() => {
+              setView('contacts');
+              setMobile(false);
+            }}
+          >
+            <Users size={17} />
+            <span>Contacts</span>
+            {!!workspace.contactsPending && (
+              <small
+                className="nav-alert"
+                aria-label={`${workspace.contactsPending} requests waiting`}
+              >
+                {workspace.contactsPending}
+              </small>
+            )}
+          </button>
+          <button
             className="nav-item"
             onClick={() => setDialog({ type: 'settings' })}
           >
@@ -491,7 +511,9 @@ export function App() {
                   ? 'Activity'
                   : view === 'space'
                     ? 'Pages'
-                    : 'Memories'}
+                    : view === 'contacts'
+                      ? 'Contacts'
+                      : 'Memories'}
             </strong>
           </div>
           <div className="top-actions">
@@ -709,12 +731,16 @@ export function App() {
                 <h1>
                   {view === 'memories'
                     ? 'Memories'
-                    : 'A little follow-through.'}
+                    : view === 'contacts'
+                      ? 'Agent Contacts'
+                      : 'A little follow-through.'}
                 </h1>
                 <p>
                   {view === 'memories'
                     ? 'Preferences you choose to share with your Dots.'
-                    : 'Scheduled turns run on the server in their original conversation.'}
+                    : view === 'contacts'
+                      ? 'Your Dots and the agents of people you trust, with you approving every message.'
+                      : 'Scheduled turns run on the server in their original conversation.'}
                 </p>
               </div>
               {view === 'memories' && (
@@ -727,7 +753,9 @@ export function App() {
                 </button>
               )}
             </div>
-            {view === 'memories' ? (
+            {view === 'contacts' ? (
+              <ContactsView dots={workspace.dots} />
+            ) : view === 'memories' ? (
               <>
                 <div className="memory-grid">
                   {state.memories.map((memory) => (

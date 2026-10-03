@@ -29,6 +29,7 @@ export function workspaceRoutes(platform: Platform, voice: VoiceService) {
       conversations: platform.workspace.conversations(),
       setup: platform.setup(),
       calls: platform.workspace.calls(),
+      contactsPending: platform.workspace.contacts.pendingIncoming(),
     }),
   );
   app.post('/spaces', async (c) => {

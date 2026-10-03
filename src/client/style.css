@@ -4130,3 +4130,159 @@ h3 {
   overflow-wrap: anywhere;
   font-size: 11px;
 }
+
+/* Agent Contacts: inbox, pairing, and outgoing requests. */
+.contacts-view {
+  display: grid;
+  gap: 18px;
+  max-width: 860px;
+  padding-bottom: 48px;
+}
+.contacts-section {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px;
+  background: #fff;
+  min-width: 0;
+}
+.contacts-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.contacts-section input,
+.contacts-section textarea,
+.contacts-section select {
+  width: 100%;
+}
+.contacts-section > .primary {
+  margin-top: 14px;
+}
+.contacts-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+}
+.contact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.contact-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.contact-list li:first-child {
+  border-top: 0;
+}
+.contact-list li > span {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.contact-list strong,
+.contact-list small {
+  display: block;
+}
+.contact-list small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contact-list select {
+  width: auto;
+  max-width: 160px;
+}
+.contact-request {
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+.contact-request:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+.contact-request header {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+}
+.contact-request header span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+.contact-exact {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--line);
+  background: #fafafa;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.contact-request .field-label {
+  margin-top: 10px;
+}
+.contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.contact-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+.contact-actions .contact-secondary,
+.contact-actions .primary {
+  margin-top: 0;
+}
+.contact-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.invite-code {
+  margin-top: 14px;
+}
+.invite-code code {
+  display: block;
+  max-height: 96px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f4f4f4;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.nav-item .nav-alert {
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: #c4473a;
+  color: #fff;
+  text-align: center;
+}
+.contacts-view .connection-action-result pre,
+.contact-request .connection-action-result pre,
+.connection-action-card .connection-action-result pre {
+  font-family: inherit;
+  font-size: 12px;
+}

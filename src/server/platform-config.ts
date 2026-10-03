@@ -25,6 +25,7 @@ export interface PlatformConfig extends WebConfig {
   imessageDbPath?: string;
   runtimeUrl: string;
   ownerToken?: string;
+  publicUrl?: string;
 }
 export function setupStatus(
   config: PlatformConfig,

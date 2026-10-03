@@ -7,6 +7,7 @@ import { Store } from '../src/server/store.js';
 import { WorkspaceStore } from '../src/server/workspace.js';
 import { pageReviewTool } from '../src/shared/page-review.js';
 import { connectionActionTool } from '../src/shared/connection-types.js';
+import { contactRequestTool } from '../src/shared/contact-types.js';
 
 const databases: Array<{ close(): void }> = [];
 afterEach(() => {
@@ -302,4 +303,43 @@ it('offers connected tools to the model and the approval tool only when the web 
   const headless = await toolNames([]);
   expect(headless).toContain('mail__send_mail');
   expect(headless).not.toContain(connectionActionTool.name);
+});
+
+it('offers contact tools only with an active contact and the web review card', async () => {
+  const f = fixture();
+  const toolNames = async (clientTools: RunAgentInput['tools']) => {
+    const network = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(
+        completion({ role: 'assistant', content: 'Ready.' }),
+      );
+    await lastValueFrom(
+      f.agent
+        .clone()
+        .run({ ...f.input, tools: clientTools })
+        .pipe(toArray()),
+    );
+    const body = JSON.parse(String(network.mock.calls[0][1]?.body)) as {
+      tools: { function: { name: string } }[];
+    };
+    network.mockRestore();
+    return body.tools.map((tool) => tool.function.name);
+  };
+  const web = [
+    { name: contactRequestTool.name, description: 'client', parameters: {} },
+  ];
+  const invited = f.workspace.contacts.create({
+    name: 'Sam',
+    secret: 's'.repeat(40),
+    status: 'invited',
+    dotId: f.dot.id,
+  });
+  expect(await toolNames(web)).not.toContain('list_contacts');
+  f.workspace.contacts.activate(invited.id, 'https://sam.example', 'Sam');
+  expect(await toolNames(web)).toEqual(
+    expect.arrayContaining(['list_contacts', contactRequestTool.name]),
+  );
+  const headless = await toolNames([]);
+  expect(headless).not.toContain('list_contacts');
+  expect(headless).not.toContain(contactRequestTool.name);
 });

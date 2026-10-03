@@ -1,5 +1,6 @@
 import { ComputerService } from './computer-service.js';
 import { ConnectionService } from './connections.js';
+import { ContactService, modelDraft } from './contacts.js';
 import { PageService } from './page-service.js';
 import { randomUUID } from 'node:crypto';
 import {
@@ -25,6 +26,7 @@ export class Platform {
   readonly pages: PageService;
   readonly computers: ComputerService;
   readonly connections: ConnectionService;
+  readonly contacts: ContactService;
   readonly intelligence?: CopilotKitIntelligence;
   readonly handler?: CopilotHonoApp;
   constructor(
@@ -38,6 +40,12 @@ export class Platform {
       () => store.settings().paused,
     );
     this.connections = new ConnectionService(workspace.connections);
+    this.contacts = new ContactService(workspace.contacts, {
+      publicUrl: config.publicUrl,
+      ownerName: () => store.settings().name,
+      dot: (id) => workspace.dot(id),
+      draft: modelDraft(config),
+    });
     this.pages = new PageService(workspace, () => {
       this.requireReady();
       return this.intelligence!;

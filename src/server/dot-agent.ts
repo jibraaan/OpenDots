@@ -5,6 +5,7 @@ import { computerTools } from './computer-tools.js';
 import { ConnectionService } from './connections.js';
 import { connectionTools } from './connection-tools.js';
 import { connectionActionTool } from '../shared/connection-types.js';
+import { contactRequestTool } from '../shared/contact-types.js';
 import { pageAccess, pageTools } from './page-tools.js';
 import { AbstractAgent } from '@ag-ui/client';
 import { type BaseEvent, type RunAgentInput, EventType } from '@ag-ui/core';
@@ -253,10 +254,38 @@ export class DotAgent extends AbstractAgent {
         const clientTools = this.channel
           ? []
           : input.tools.filter((tool) =>
-              [pageReviewTool.name, connectionActionTool.name].includes(
-                tool.name,
-              ),
+              [
+                pageReviewTool.name,
+                connectionActionTool.name,
+                contactRequestTool.name,
+              ].includes(tool.name),
             );
+        const contacts = this.workspace.contacts
+          .list()
+          .filter((contact) => contact.status === 'active');
+        const canAskContacts =
+          contacts.length > 0 &&
+          clientTools.some((tool) => tool.name === contactRequestTool.name);
+        if (canAskContacts)
+          tools.push(
+            defineTool({
+              name: 'list_contacts',
+              description:
+                "List the owner's paired Agent Contacts: other people's agents you can message with ask_contact after owner review.",
+              parameters: z.object({}),
+              execute: async () => {
+                check();
+                return this.workspace.contacts
+                  .list()
+                  .filter((contact) => contact.status === 'active')
+                  .map((contact) => ({
+                    contactId: contact.id,
+                    name: contact.name,
+                    theirName: contact.peerName,
+                  }));
+              },
+            }),
+          );
         const approvals = clientTools.some(
           (tool) => tool.name === connectionActionTool.name,
         );
@@ -348,6 +377,7 @@ export class DotAgent extends AbstractAgent {
                 ? [pageReviewTool]
                 : []),
               ...(approvals ? [connectionActionTool] : []),
+              ...(canAskContacts ? [contactRequestTool] : []),
             ],
             forwardedProps: {},
           })

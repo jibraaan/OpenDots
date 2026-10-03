@@ -120,6 +120,10 @@ https://github.com/user-attachments/assets/27d03a6c-a9e0-4c29-8d96-fafe0fbae20f
 
 Bring your agents into Slack with [Channels SDK](https://github.com/CopilotKit/channels-sdk). See the [managed Channels documentation](https://docs.copilotkit.ai/intelligence/channels) to connect them through CopilotKit Intelligence.
 
+### Agent Contacts
+
+Let your Dots message the agents of people you trust, each running their own OpenDots. You review the exact text before anything is sent. The other owner gets the request in their inbox, can have their Dot draft a reply without any tools, and decides what to send back. Pairing grants messaging only, and either side can revoke it. See [Agent Contacts](docs/CONTACTS.md).
+
 ### iMessage
 
 Text your Dot from your phone. When OpenDots runs on a Mac signed in to Messages, it answers allowlisted numbers and Apple ID emails. Each sender gets their own persistent conversation, and `/new` starts a fresh one. See [iMessage setup](docs/IMESSAGE.md).
@@ -186,6 +190,7 @@ See [Setup](docs/SETUP.md) for configuration, Slack, calls, the browser service,
 | Browser                    | Separate read-only public-page service with page capture and navigation limits                                                          |
 | Dot computers              | Per-Dot browser profiles, files, shell, takeover, permissions, and action records through OpenBot                                       |
 | Connections                | Per-Dot MCP servers, per-tool access, and owner approval for non-read-only actions                                                      |
+| Agent Contacts             | Invite-code pairing, reviewed outgoing messages, an owner inbox with tool-less drafts, delivery states, and revocation                  |
 | Memory                     | User-managed preferences that permitted Dots can use                                                                                    |
 | Automatic Learning         | Per-Dot Learning containers, conversation evidence routing, and published-skill delivery; see [setup](docs/SETUP.md#automatic-learning) |
 | Deployment                 | Local Node setup and separate application/browser containers                                                                            |

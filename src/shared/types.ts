@@ -116,4 +116,5 @@ export interface WorkspaceState {
   conversations: Conversation[];
   setup: SetupStatus;
   calls: CallReceipt[];
+  contactsPending?: number;
 }

@@ -9,6 +9,7 @@ import { createApp } from './app.js';
 import { WorkspaceStore } from './workspace.js';
 import { Platform } from './platform.js';
 import { IMessageBridge, macMessages } from './imessage.js';
+import { peerUrl } from './contacts.js';
 import type { PlatformConfig } from './platform-config.js';
 const host = process.env.HOST ?? '127.0.0.1';
 const port = Number(process.env.PORT ?? 4310);
@@ -59,6 +60,9 @@ const config: PlatformConfig = {
   imessageDbPath: process.env.IMESSAGE_DB_PATH || undefined,
   runtimeUrl: `http://${host === '::1' ? '[::1]' : '127.0.0.1'}:${port}/api/copilotkit`,
   ownerToken,
+  publicUrl: process.env.PUBLIC_URL
+    ? peerUrl.parse(process.env.PUBLIC_URL)
+    : undefined,
 };
 const platform = new Platform(store, workspace, config);
 const researchConfig = {
@@ -145,6 +149,7 @@ const server = serve({ fetch: app.fetch, hostname: host, port }, (info) => {
       'iMessage is waiting for setup: configure conversations first.',
     );
   else imessage?.start();
+  void platform.contacts.retryUndelivered();
   void platform
     .start()
     .catch((error) =>
