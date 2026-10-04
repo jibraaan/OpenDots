@@ -1,6 +1,13 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { contactText, type Contact } from '../shared/contact-types.js';
+import {
+  APPROVAL_TTL_MS,
+  MAX_ATTACHMENTS,
+  attachmentSchema,
+  contactText,
+  type Attachment,
+  type Contact,
+} from '../shared/contact-types.js';
 import type { ContactStore } from './contact-store.js';
 const INVITE_TTL_MS = 7 * 24 * 60 * 60_000;
 const MAX_PENDING_INCOMING = 20;
@@ -31,8 +38,16 @@ export const peerPairBody = z
   .object({ url: peerUrl, name: z.string().trim().min(1).max(80) })
   .strict();
 export const peerMessageBody = z
-  .object({ id: z.string().uuid(), text: contactText })
+  .object({
+    id: z.string().uuid(),
+    text: contactText,
+    attachments: z.array(attachmentSchema).max(MAX_ATTACHMENTS).optional(),
+  })
   .strict();
+// Same recipient, text, and page versions: the same approval.
+const sameApproval = (a: Attachment[], b: Attachment[]) =>
+  JSON.stringify(a.map(({ title, revision }) => [title, revision])) ===
+  JSON.stringify(b.map(({ title, revision }) => [title, revision]));
 export const peerReplyBody = z
   .object({
     decision: z.enum(['answered', 'declined']),
@@ -53,6 +68,7 @@ export interface DraftInput {
   contactName: string;
   exchange: { from: 'you' | 'them'; text: string }[];
   request: string;
+  sharedPages: { title: string; content: string }[];
   guidance?: string;
 }
 export class ContactService {
@@ -148,16 +164,22 @@ export class ContactService {
       ).catch(() => {});
     return this.store.get(id)!;
   }
-  // Called only from the owner's approval route, with the approved text.
+  // Called only from the owner's approval route, with the approved text and
+  // the exact page versions the owner saw.
   async send(
     contactId: string,
     text: string,
     threadId: string,
     toolCallId: string,
+    attachments: Attachment[] = [],
   ) {
     const existing = this.store.byToolCall(threadId, toolCallId);
     if (existing) {
-      if (existing.contactId !== contactId || existing.text !== text)
+      if (
+        existing.contactId !== contactId ||
+        existing.text !== text ||
+        !sameApproval(existing.attachments, attachments)
+      )
         throw new Error('This approval was already used for another message.');
       return existing.delivery === 'failed'
         ? this.deliver(existing.id)
@@ -171,6 +193,8 @@ export class ContactService {
       delivery: 'queued',
       threadId,
       toolCallId,
+      attachments,
+      approvedAt: Date.now(),
     })!;
     return this.deliver(message.id);
   }
@@ -191,7 +215,12 @@ export class ContactService {
     if (message.decision !== 'pending')
       throw new Error('This request was already answered.');
     this.require(message.contactId, 'active');
-    this.store.update(messageId, { decision, reply, delivery: 'queued' });
+    this.store.update(messageId, {
+      decision,
+      reply,
+      delivery: 'queued',
+      approvedAt: Date.now(),
+    });
     return this.deliver(messageId);
   }
   async deliver(messageId: string) {
@@ -203,6 +232,12 @@ export class ContactService {
         delivery: 'failed',
         error: 'This contact is no longer active.',
       });
+    // A stale approval never goes out on a later retry or restart.
+    if (message.approvedAt && Date.now() - message.approvedAt > APPROVAL_TTL_MS)
+      return this.store.update(messageId, {
+        delivery: 'failed',
+        error: 'This approval expired. Ask again to send it.',
+      });
     try {
       await this.peer(
         contact.peerUrl,
@@ -212,7 +247,13 @@ export class ContactService {
           ? '/messages'
           : `/messages/${encodeURIComponent(message.id)}/reply`,
         message.direction === 'out'
-          ? { id: message.id, text: message.text }
+          ? {
+              id: message.id,
+              text: message.text,
+              ...(message.attachments.length
+                ? { attachments: message.attachments }
+                : {}),
+            }
           : {
               decision: message.decision,
               ...(message.reply ? { text: message.reply } : {}),
@@ -264,6 +305,10 @@ export class ContactService {
       contactName: contact.peerName ?? contact.name,
       exchange,
       request: message.text,
+      sharedPages: message.attachments.map(({ title, content }) => ({
+        title,
+        content,
+      })),
       guidance: guidance?.trim() || undefined,
     });
   }
@@ -306,6 +351,7 @@ export class ContactService {
       direction: 'in',
       text: body.text,
       delivery: null,
+      attachments: body.attachments ?? [],
     })!;
   }
   peerReply(
@@ -397,6 +443,7 @@ export function modelDraft(config: {
               content: JSON.stringify({
                 earlierExchange: input.exchange,
                 newRequest: input.request,
+                sharedPages: input.sharedPages,
                 ownerGuidance: input.guidance ?? null,
               }),
             },

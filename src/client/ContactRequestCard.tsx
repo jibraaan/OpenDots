@@ -4,8 +4,10 @@ import {
   contactRequestSchema,
   type Contact,
   type ContactMessage,
+  type PagePreview,
 } from '../shared/contact-types';
 import { api } from './api';
+import { SharedPages } from './SharedPages';
 import { computerToolResult } from './ComputerToolCard';
 const requests = (threadId: string) =>
   `/conversations/${encodeURIComponent(threadId)}/contact-requests`;
@@ -40,9 +42,41 @@ export function ContactRequestCard({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [shared, setShared] = useState(false);
+  const [previews, setPreviews] = useState<PagePreview[]>();
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const pending = useRef(false);
   const finished = status === 'complete';
   const contactId = request.success ? request.data.contactId : '';
+  const pageRefs = request.success ? (request.data.pages ?? []) : [];
+  const pageKey = pageRefs
+    .map((ref) => `${ref.spaceId}/${ref.pageId}`)
+    .join(',');
+  // Show the owner the exact versions that will be shared.
+  useEffect(() => {
+    if (!pageKey) return;
+    let active = true;
+    setPreviews(undefined);
+    const query = pageKey
+      .split(',')
+      .map((ref) => `page=${encodeURIComponent(ref)}`)
+      .join('&');
+    void api<PagePreview[]>(
+      `/conversations/${encodeURIComponent(threadId)}/contact-pages?${query}`,
+    )
+      .then((value) => active && setPreviews(value))
+      .catch(
+        (cause) =>
+          active &&
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : 'Could not load the pages.',
+          ),
+      );
+    return () => {
+      active = false;
+    };
+  }, [threadId, pageKey, previewAttempt]);
   useEffect(() => {
     if (!contactId) return;
     let active = true;
@@ -94,6 +128,15 @@ export function ContactRequestCard({
         toolCallId,
         contactId: request.data.contactId,
         message: request.data.message,
+        ...(previews?.length
+          ? {
+              pages: previews.map(({ spaceId, pageId, revision }) => ({
+                spaceId,
+                pageId,
+                revision,
+              })),
+            }
+          : {}),
       });
       setMessage(sent);
       if (!finished && respond)
@@ -104,9 +147,12 @@ export function ContactRequestCard({
           note: 'Replies arrive later and appear on this card.',
         });
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : 'Could not send this message.',
-      );
+      const text =
+        cause instanceof Error ? cause.message : 'Could not send this message.';
+      setError(text);
+      // A page changed since review: load the new version for another look.
+      if (text.includes('changed after you reviewed'))
+        setPreviewAttempt((n) => n + 1);
     } finally {
       pending.current = false;
       setBusy(false);
@@ -140,6 +186,16 @@ export function ContactRequestCard({
         <p className="contact-exact">
           {request.success ? request.data.message : 'Preparing the message…'}
         </p>
+        {message ? (
+          <SharedPages pages={message.attachments} label="Pages sent" />
+        ) : pageRefs.length > 0 && !previews ? (
+          <p className="muted">Loading the pages to share…</p>
+        ) : (
+          <SharedPages
+            pages={previews ?? []}
+            label="Pages to share (this exact version)"
+          />
+        )}
         {message?.reply && (
           <div className="connection-action-result">
             <strong>{name} replied</strong>
@@ -161,7 +217,10 @@ export function ContactRequestCard({
               type="button"
               className="review-primary"
               disabled={
-                busy || !request.success || contact?.status !== 'active'
+                busy ||
+                !request.success ||
+                contact?.status !== 'active' ||
+                (pageRefs.length > 0 && !previews)
               }
               onClick={() => void send()}
             >
@@ -207,7 +266,9 @@ export function ContactRequestCard({
           {!message && !finished
             ? contact && contact.status !== 'active'
               ? 'This contact is not active.'
-              : 'Only this exact text is sent. Nothing else from your workspace.'
+              : previews?.length
+                ? 'Only this text and these page versions are sent.'
+                : 'Only this exact text is sent. Nothing else from your workspace.'
             : ''}
         </small>
       </footer>

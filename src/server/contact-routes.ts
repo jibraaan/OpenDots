@@ -1,7 +1,13 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
-import { contactRequestSchema } from '../shared/contact-types.js';
+import {
+  MAX_ATTACHMENT_CHARS,
+  MAX_ATTACHMENTS,
+  contactRequestSchema,
+  type Attachment,
+  type PagePreview,
+} from '../shared/contact-types.js';
 import type { WorkspaceStore } from './workspace.js';
 import {
   PeerError,
@@ -17,7 +23,8 @@ export function peerRoutes(contacts: ContactService) {
   app.use(
     '*',
     bodyLimit({
-      maxSize: 64_000,
+      // Text plus up to three 20k-character page snapshots.
+      maxSize: 256_000,
       onError: (c) => c.json({ error: 'Request is too large.' }, 413),
     }),
   );
@@ -148,6 +155,33 @@ export function contactRoutes(
       throw new Error('Only failed deliveries can be retried.');
     return c.json(await contacts.deliver(message.id));
   });
+  // Pages are shared only from Spaces this conversation's Dot can access.
+  const page = (dotId: string, spaceId: string, pageId: string) => {
+    if (!workspace.canAccessSpace(dotId, spaceId))
+      throw new Error('This Dot cannot access that page’s Space.');
+    return workspace.pages.get(spaceId, pageId);
+  };
+  app.get('/conversations/:id/contact-pages', (c) => {
+    const thread = workspace.requireThread(c.req.param('id'));
+    const refs = z
+      .array(z.string().regex(/^[^/]{1,64}\/[^/]{1,64}$/))
+      .max(MAX_ATTACHMENTS)
+      .parse(c.req.queries('page') ?? []);
+    return c.json(
+      refs.map((ref): PagePreview => {
+        const [spaceId, pageId] = ref.split('/');
+        const found = page(thread.dotId, spaceId, pageId);
+        return {
+          spaceId,
+          pageId,
+          title: found.title,
+          revision: found.revision,
+          content: found.content,
+          length: found.content.length,
+        };
+      }),
+    );
+  });
   app.get('/conversations/:id/contact-requests/:toolCallId', (c) => {
     const thread = workspace.requireThread(c.req.param('id'));
     return c.json(
@@ -158,15 +192,48 @@ export function contactRoutes(
   // this exact recipient and text in the conversation's review card.
   app.post('/conversations/:id/contact-requests', async (c) => {
     const body = contactRequestSchema
-      .extend({ toolCallId: z.string().min(1).max(200) })
+      .omit({ pages: true })
+      .extend({
+        toolCallId: z.string().min(1).max(200),
+        pages: z
+          .array(
+            z
+              .object({
+                spaceId: z.string().min(1).max(64),
+                pageId: z.string().min(1).max(64),
+                revision: z.number().int().min(0),
+              })
+              .strict(),
+          )
+          .max(MAX_ATTACHMENTS)
+          .optional(),
+      })
       .parse(await c.req.json());
     const thread = workspace.requireThread(c.req.param('id'));
+    // Snapshot exactly the versions the owner reviewed, or refuse.
+    const attachments = (body.pages ?? []).map((ref): Attachment => {
+      const found = page(thread.dotId, ref.spaceId, ref.pageId);
+      if (found.revision !== ref.revision)
+        throw new Error(
+          `“${found.title}” changed after you reviewed it. Review it again.`,
+        );
+      if (found.content.length > MAX_ATTACHMENT_CHARS)
+        throw new Error(
+          `“${found.title}” is too long to share (20,000 characters at most).`,
+        );
+      return {
+        title: found.title,
+        content: found.content,
+        revision: found.revision,
+      };
+    });
     return c.json(
       await contacts.send(
         body.contactId,
         body.message,
         thread.id,
         body.toolCallId,
+        attachments,
       ),
     );
   });

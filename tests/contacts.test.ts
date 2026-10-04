@@ -183,6 +183,7 @@ it('delivers the approved text once and returns the other owner’s reply', asyn
     contactName: 'Alex',
     exchange: [],
     request: 'Is Saturday still on?',
+    sharedPages: [],
     guidance: 'Yes, 10am',
   });
   const answered = await sam.api<ContactMessage>(
@@ -304,4 +305,115 @@ it('requires PUBLIC_URL before inviting or accepting', async () => {
   expect(() => contacts.createInvite('Sam', workspace.dots()[0].id)).toThrow(
     'PUBLIC_URL',
   );
+});
+it('shares the exact page versions the owner reviewed', async () => {
+  const { alex, sam, id } = await paired();
+  const space = alex.dot.spaceId;
+  const page = alex.workspace.pages.create(space, {
+    title: 'Trip plan',
+    content: '# Saturday\nTrailhead at 9.',
+  });
+  const [preview] = await alex.api<{ revision: number; title: string }[]>(
+    `/conversations/thread/contact-pages?page=${space}/${page.id}`,
+  );
+  expect(preview).toMatchObject({
+    title: 'Trip plan',
+    revision: page.revision,
+  });
+  const share = (revision: number, toolCallId = 'share') =>
+    alex.api<ContactMessage>('/conversations/thread/contact-requests', 'POST', {
+      contactId: id,
+      message: 'Here is the plan.',
+      toolCallId,
+      pages: [{ spaceId: space, pageId: page.id, revision }],
+    });
+  const sent = await share(preview.revision);
+  expect(sent.attachments).toEqual([
+    {
+      title: 'Trip plan',
+      content: '# Saturday\nTrailhead at 9.',
+      revision: preview.revision,
+    },
+  ]);
+  const [incoming] = (await state(sam)).messages;
+  expect(incoming.attachments).toEqual(sent.attachments);
+  await sam.api(`/contact-messages/${incoming.id}/draft`, 'POST', {});
+  expect(sam.drafts.at(-1)!.sharedPages).toEqual([
+    { title: 'Trip plan', content: '# Saturday\nTrailhead at 9.' },
+  ]);
+  // The same approval cannot be reused to send different content.
+  await expect(
+    alex.api('/conversations/thread/contact-requests', 'POST', {
+      contactId: id,
+      message: 'Here is the plan.',
+      toolCallId: 'share',
+    }),
+  ).rejects.toThrow('already used');
+  // A page edited after review is refused, not silently sent.
+  alex.workspace.pages.update(space, page.id, {
+    content: 'Changed',
+    expectedRevision: page.revision,
+  });
+  await expect(share(preview.revision, 'stale')).rejects.toThrow(
+    'changed after you reviewed it',
+  );
+  expect((await state(sam)).messages).toHaveLength(1);
+});
+it('only shares pages the Dot can access, within the size limit', async () => {
+  const { alex, id } = await paired();
+  const other = alex.workspace.createSpace('Private', 'Not for this Dot');
+  const hidden = alex.workspace.pages.create(other.id, {
+    title: 'Private notes',
+    content: 'Secret',
+  });
+  await expect(
+    alex.api(
+      `/conversations/thread/contact-pages?page=${other.id}/${hidden.id}`,
+    ),
+  ).rejects.toThrow('cannot access');
+  await expect(
+    alex.api('/conversations/thread/contact-requests', 'POST', {
+      contactId: id,
+      message: 'Sharing',
+      toolCallId: 'hidden',
+      pages: [
+        { spaceId: other.id, pageId: hidden.id, revision: hidden.revision },
+      ],
+    }),
+  ).rejects.toThrow('cannot access');
+  const long = alex.workspace.pages.create(alex.dot.spaceId, {
+    title: 'Long',
+    content: 'x'.repeat(20_001),
+  });
+  await expect(
+    alex.api('/conversations/thread/contact-requests', 'POST', {
+      contactId: id,
+      message: 'Sharing',
+      toolCallId: 'long',
+      pages: [
+        { spaceId: alex.dot.spaceId, pageId: long.id, revision: long.revision },
+      ],
+    }),
+  ).rejects.toThrow('too long');
+});
+it('expires approvals that were never delivered', async () => {
+  const { alex, sam, id } = await paired();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(Date.UTC(2026, 9, 4, 9));
+  sam.setOnline(false);
+  const failed = await ask(alex, id, 'Still on for Saturday?');
+  expect(failed.delivery).toBe('failed');
+  sam.setOnline(true);
+  vi.setSystemTime(Date.UTC(2026, 9, 5, 10));
+  await alex.contacts.retryUndelivered();
+  expect(alex.workspace.contacts.message(failed.id)).toMatchObject({
+    delivery: 'failed',
+    error: 'This approval expired. Ask again to send it.',
+  });
+  // Retrying through the card is refused for the same reason.
+  expect(await ask(alex, id, 'Still on for Saturday?')).toMatchObject({
+    delivery: 'failed',
+    error: 'This approval expired. Ask again to send it.',
+  });
+  expect((await state(sam)).messages).toEqual([]);
 });

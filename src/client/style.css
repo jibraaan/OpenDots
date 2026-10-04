@@ -4431,3 +4431,55 @@ h3 {
   opacity: 0.5;
   cursor: default;
 }
+.shared-pages {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  font-size: 12px;
+}
+.shared-pages > strong {
+  font-size: 11px;
+  font-weight: 600;
+  color: #6b6b6b;
+}
+.shared-pages details {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+}
+.shared-pages summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+}
+.shared-pages summary::-webkit-details-marker {
+  display: none;
+}
+.shared-pages summary span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 550;
+}
+.shared-pages summary small {
+  color: #6b6b6b;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.shared-pages pre {
+  max-height: 200px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+}

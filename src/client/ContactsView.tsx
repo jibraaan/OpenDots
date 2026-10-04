@@ -4,6 +4,7 @@ import type { Contact, ContactMessage } from '../shared/contact-types';
 import type { Dot } from '../shared/types';
 import { api } from './api';
 import { contactStatus } from './ContactRequestCard';
+import { SharedPages } from './SharedPages';
 type State = {
   contacts: Contact[];
   messages: ContactMessage[];
@@ -75,6 +76,7 @@ function IncomingRequest({
         </span>
       </header>
       <p className="contact-exact">{message.text}</p>
+      <SharedPages pages={message.attachments} label="Pages they shared" />
       {pending && active && (
         <>
           <label className="field-label" htmlFor={`guidance-${message.id}`}>
@@ -455,6 +457,7 @@ export function ContactsView({ dots }: { dots: Dot[] }) {
                 <span>{contactStatus(message)}</span>
               </header>
               <p className="contact-exact">{message.text}</p>
+              <SharedPages pages={message.attachments} label="Pages sent" />
               {message.reply && (
                 <div className="connection-action-result">
                   <strong>Reply</strong>

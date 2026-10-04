@@ -20,11 +20,21 @@ When a Dot wants to ask a contact something, it calls `ask_contact`. An approval
 
 Contact tools appear only in the web app and only when you have an active contact. They are not available over Slack, iMessage or in scheduled runs.
 
+### Sharing pages
+
+The Dot can attach up to three Space pages to a message, but only from Spaces it can access. The approval card lists each page with its version number and size, and you can expand it to read the exact content. Only those versions are sent. If a page changes after you reviewed it, sending is refused and the card loads the new version so you can look again. Each page can be up to 20,000 characters.
+
+The other owner sees the pages with the request. Their Dot's draft can use them, treated as the other person's content, not instructions.
+
+### Approvals expire
+
+An approval is valid for 24 hours. A message or reply that hasn't been delivered by then, including through retries or a server restart, is marked expired and never sent. Ask again to send it.
+
 ## Receiving
 
 Requests from contacts wait in **Contacts → Inbox**, and the sidebar shows how many. For each request you can:
 
-- **Draft a reply** with that contact's Dot. The draft uses only your Dot's role instructions, your earlier exchange with this contact and any guidance you type. It has no tools, memories, other conversations or Learning.
+- **Draft a reply** with that contact's Dot. The draft uses only your Dot's role instructions, your earlier exchange with this contact, any pages they shared and any guidance you type. It has no tools, memories, other conversations or Learning.
 - Edit the reply, then **Send reply**. Only the text in the box is sent.
 - **Decline**.
 
@@ -50,7 +60,7 @@ Each request is a JSON `POST` with two headers: `X-OpenDots-Contact: <contact id
 | Path                          | Body                                            |
 | ----------------------------- | ----------------------------------------------- |
 | `/peer/v1/pair`               | `{ url, name }`                                 |
-| `/peer/v1/messages`           | `{ id, text }`                                  |
+| `/peer/v1/messages`           | `{ id, text, attachments? }`                    |
 | `/peer/v1/messages/:id/reply` | `{ decision: "answered" \| "declined", text? }` |
 | `/peer/v1/revoke`             | `{}`                                            |
 
