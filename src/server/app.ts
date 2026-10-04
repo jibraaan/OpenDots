@@ -1,5 +1,6 @@
 import { computerRoutes } from './computer-routes.js';
-import { connectionRoutes } from './connection-routes.js';
+import { connectionRoutes, oauthCallbackRoute } from './connection-routes.js';
+import { OAUTH_CALLBACK_PATH } from './connection-oauth.js';
 import { contactRoutes, peerRoutes } from './contact-routes.js';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -79,8 +80,14 @@ export function createApp({
   if (platform)
     app.route(
       '/api',
-      connectionRoutes(platform.workspace, platform.connections),
+      connectionRoutes(
+        platform.workspace,
+        platform.connections,
+        platform.config.publicUrl,
+      ),
     );
+  if (platform)
+    app.route(OAUTH_CALLBACK_PATH, oauthCallbackRoute(platform.connections));
   if (platform) {
     app.route(
       '/api',
