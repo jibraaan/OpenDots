@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, authHeaders } from './api';
-import { createRecoveryWindow } from './voice-recovery';
-const RECOVERY_GRACE_MS = 5000;
+// A single failed control poll is usually a network flap, not a dead call.
+// Only treat the control connection as lost after this many consecutive
+// poll failures, mirroring the grace period #26 gives the peer connection.
+const CONTROL_POLL_FAILURE_LIMIT = 3;
 export function useVoice(
   threadId: string,
   onSaved: () => void,
@@ -31,7 +33,8 @@ export function useVoice(
         channel: RTCDataChannel;
         transcript: string[];
         timer?: ReturnType<typeof setTimeout>;
-        recovery: ReturnType<typeof createRecoveryWindow>;
+        controlPollFailures: number;
+        disconnectTimer?: ReturnType<typeof setTimeout>;
         cancelled: boolean;
       }
     | undefined
@@ -48,7 +51,7 @@ export function useVoice(
     current.audio.pause();
     current.audio.srcObject = null;
     clearTimeout(current.timer);
-    current.recovery.dispose();
+    clearTimeout(current.disconnectTimer);
   }, []);
   const end = useCallback(async () => {
     if (ending.current) return;
@@ -67,7 +70,7 @@ export function useVoice(
     });
     current.audio.pause();
     clearTimeout(current.timer);
-    current.recovery.dispose();
+    clearTimeout(current.disconnectTimer);
     ending.current = true;
     setStatus('ending');
     try {
@@ -117,15 +120,19 @@ export function useVoice(
         void api<{ endedAt: number | null }>(`/voice/calls/${id}`)
           .then((call) => {
             if (session.current !== current) return;
-            current?.recovery.recover('control');
-            if (call.endedAt) void end();
+            if (call.endedAt) {
+              void end();
+              return;
+            }
+            current.controlPollFailures = 0;
           })
           .catch(() => {
             if (session.current !== current) return;
-            current?.recovery.fault(
-              'control',
-              'Call control connection was lost.',
-            );
+            current.controlPollFailures += 1;
+            if (current.controlPollFailures < CONTROL_POLL_FAILURE_LIMIT)
+              return;
+            setError('Call control connection was lost.');
+            void end();
           });
     }, 2000);
     return () => clearInterval(timer);
@@ -162,11 +169,8 @@ export function useVoice(
         cancelled: false,
         id: undefined as string | undefined,
         timer: undefined as ReturnType<typeof setTimeout> | undefined,
-        recovery: createRecoveryWindow(RECOVERY_GRACE_MS, (message) => {
-          if (current.cancelled) return;
-          setError(message);
-          void end();
-        }),
+        controlPollFailures: 0,
+        disconnectTimer: undefined as ReturnType<typeof setTimeout> | undefined,
       };
       session.current = current;
       stream.getTracks().forEach((track) => pc.addTrack(track, stream!));
@@ -183,7 +187,8 @@ export function useVoice(
       pc.onconnectionstatechange = () => {
         if (current.cancelled) return;
         if (pc.connectionState === 'connected') {
-          current.recovery.recover('peer');
+          clearTimeout(current.disconnectTimer);
+          current.disconnectTimer = undefined;
           setStatus('active');
           setStartedAt((value) => value ?? Date.now());
           if (current.id)
@@ -193,9 +198,15 @@ export function useVoice(
               },
             );
         }
-        // A disconnected peer often reconnects on its own; failed is final.
-        if (pc.connectionState === 'disconnected')
-          current.recovery.fault('peer', 'The voice connection dropped.');
+        if (pc.connectionState === 'disconnected' && !current.disconnectTimer) {
+          current.disconnectTimer = setTimeout(() => {
+            current.disconnectTimer = undefined;
+            if (current.cancelled || pc.connectionState !== 'disconnected')
+              return;
+            setError('The voice connection dropped.');
+            void end();
+          }, 5000);
+        }
         if (pc.connectionState === 'failed') {
           setError('The voice connection dropped.');
           void end();

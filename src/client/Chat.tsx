@@ -40,7 +40,8 @@ import type { CallReceipt, Conversation, Dot } from '../shared/types';
 import { Mascot } from './Mascot';
 import { useVoice } from './useVoice';
 import { CallView } from './CallView';
-import { shouldSubmitOnEnter } from './composer';
+import { shouldSubmitComposerOnKeyDown } from './chat-composer';
+
 export function Chat({
   thread,
   dot,
@@ -457,7 +458,7 @@ export function Chat({
             maxLength={4000}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (shouldSubmitOnEnter(e)) {
+              if (shouldSubmitComposerOnKeyDown(e)) {
                 e.preventDefault();
                 e.currentTarget.form?.requestSubmit();
               }
