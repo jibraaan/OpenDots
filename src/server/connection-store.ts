@@ -33,6 +33,14 @@ export class ConnectionStore {
       db.exec(
         "ALTER TABLE mcp_connections ADD COLUMN authMode TEXT NOT NULL DEFAULT 'token'",
       );
+    // A receipt belongs to the approval that produced it.
+    if (
+      !db
+        .prepare('PRAGMA table_info(mcp_actions)')
+        .all()
+        .some((column) => column.name === 'approvalId')
+    )
+      db.exec('ALTER TABLE mcp_actions ADD COLUMN approvalId TEXT');
   }
   private rows(dotId?: string) {
     return this.db
@@ -224,11 +232,12 @@ export class ConnectionStore {
   action(threadId: string, toolCallId: string) {
     const row = this.db
       .prepare(
-        'SELECT status, result FROM mcp_actions WHERE threadId=? AND toolCallId=?',
+        'SELECT status, result, approvalId FROM mcp_actions WHERE threadId=? AND toolCallId=?',
       )
       .get(threadId, toolCallId);
     if (!row) return undefined;
     return {
+      approvalId: typeof row.approvalId === 'string' ? row.approvalId : null,
       status: String(row.status) as 'running' | 'done',
       result:
         typeof row.result === 'string'
@@ -241,15 +250,17 @@ export class ConnectionStore {
   claimAction(
     threadId: string,
     toolCallId: string,
+    approvalId: string,
     connectionId: string,
     tool: string,
   ) {
     return (
       this.db
         .prepare(
-          "INSERT OR IGNORE INTO mcp_actions VALUES (?, ?, ?, ?, 'running', NULL, ?)",
+          "INSERT OR IGNORE INTO mcp_actions (threadId, toolCallId, connectionId, tool, status, result, createdAt, approvalId) VALUES (?, ?, ?, ?, 'running', NULL, ?, ?)",
         )
-        .run(threadId, toolCallId, connectionId, tool, Date.now()).changes > 0
+        .run(threadId, toolCallId, connectionId, tool, Date.now(), approvalId)
+        .changes > 0
     );
   }
   finishAction(
